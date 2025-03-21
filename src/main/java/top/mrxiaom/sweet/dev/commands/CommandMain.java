@@ -11,17 +11,22 @@ import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.event.ClickEvent;
 import net.kyori.adventure.text.event.HoverEvent;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.EntityType;
+import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.Repairable;
+import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import top.mrxiaom.pluginbase.func.AutoRegister;
@@ -189,7 +194,7 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             return t(sender, "只有玩家可以使用该命令");
         }
         Player player = (Player) sender;
-        if (args.length == 1 && "nbt".equalsIgnoreCase(args[0]) && player.hasPermission("sweet.dev.nbt")) {
+        if (args.length == 1 && isCommand("nbt", player, args[0])) {
             ItemStack item = requireItem(player);
             if (item == null) return t(player, "你需要手持一个物品");
             t(player, "&e--------------[&f nbt &e]---------------");
@@ -203,7 +208,71 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             }
             return t(player, "&e------------------------------------");
         }
-        if (args.length >= 1 && "item".equalsIgnoreCase(args[0]) && player.hasPermission("sweet.dev.item")) {
+        if (args.length == 1 && isCommand("entity", player, args[0])) {
+            RayTraceResult result = player.rayTraceBlocks(10);
+            Entity hitEntity = result == null ? null : result.getHitEntity();
+            if (hitEntity == null) {
+                return t(player, "你需要将准星指向一个实体");
+            }
+            t(player, "&e-------------[&f entity &e]--------------");
+            EntityType type = hitEntity.getType();
+            String additionType = "";
+            String translateName = null;
+            try {
+                additionType = ", " + type.getKey();
+                translateName = "<lang:" + type.getTranslationKey() + ">";
+            } catch (LinkageError ignored) {
+            }
+            t(player, "  &f实体: &e" + type + additionType + " &7(" + type.getName() + "/" + type.getTypeId() + ")");
+            if (translateName != null) {
+                AdventureUtil.sendMessage(player, "  &f原版实体名: &r" + translateName);
+            }
+            Location loc = hitEntity.getLocation();
+            t(player, "  &f位置: &b" + hitEntity.getWorld().getName()
+                    + "&f, &e" + String.format("%.1f", loc.getX())
+                    + "&f, &e" + String.format("%.1f", loc.getY())
+                    + "&f, &e" + String.format("%.1f", loc.getZ()));
+            t(player, "  &f视角: &b偏航角, 俯仰角 &d" + String.format("%.2f", loc.getYaw())
+                    + "&f, &d" + String.format("%.2f", loc.getPitch()) + "&f )");
+            List<String> misc = new ArrayList<>();
+            if (hitEntity instanceof LivingEntity) {
+                LivingEntity living = (LivingEntity) hitEntity;
+                t(player, "  &f生命值: &e" + living.getHealth() + "&f/&e" + living.getMaxHealth());
+                try {
+                    t(player, "  &f氧气值: &e" + living.getRemainingAir() + "&f/&e" + living.getMaximumAir());
+                } catch (LinkageError ignored) {}
+                try {
+                    if (living.isInvisible()) misc.add("隐身的");
+                } catch (LinkageError ignored) {}
+                try {
+                    if (!living.hasAI()) misc.add("无AI");
+                } catch (LinkageError ignored) {}
+            }
+            if (hitEntity.isDead()) misc.add("已死亡");
+            if (hitEntity.isOp()) misc.add("管理员");
+            if (!hitEntity.isEmpty()) misc.add("有乘客");
+            try {
+                if (hitEntity.isFrozen()) misc.add("被冰冻");
+            } catch (LinkageError ignored) {}
+            try {
+                if (hitEntity.isGlowing()) misc.add("发光");
+            } catch (LinkageError ignored) {}
+            if (!hitEntity.isCustomNameVisible()) misc.add("自定义名称不可见");
+            if (hitEntity.isInsideVehicle()) misc.add("正在使用载具");
+            try {
+                if (hitEntity.isInvulnerable()) misc.add("无敌");
+            } catch (LinkageError ignored) {}
+            try {
+                if (hitEntity.isInWater()) misc.add("在水中");
+            } catch (LinkageError ignored) {}
+            if (!hitEntity.isOnGround()) misc.add("在空中");
+            if (!hitEntity.hasGravity()) misc.add("无重力");
+            if (!misc.isEmpty()) {
+                t(player, "  &f杂项属性: &e" + String.join("&f, &e"));
+            }
+            return t(player, "&e-------------------------------------");
+        }
+        if (args.length >= 1 && isCommand("item", player, args[0])) {
             if (args.length == 3 && "load".equalsIgnoreCase(args[1])) {
                 File file = new File(plugin.getDataFolder(), "items/" + args[2] + ".yml");
                 Util.mkdirs(file.getParentFile());
@@ -286,6 +355,7 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
         if (args.length == 1) {
             List<String> list = new ArrayList<>();
             if (perm("item", sender)) list.add("item");
+            if (perm("entity", sender)) list.add("entity");
             if (perm("nbt", sender)) list.add("nbt");
             if (sender.isOp()) list.add("reload");
             return startsWithL(list, args[0]);
