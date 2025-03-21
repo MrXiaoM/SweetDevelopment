@@ -19,10 +19,12 @@ import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import top.mrxiaom.pluginbase.func.AutoRegister;
 import top.mrxiaom.pluginbase.utils.AdventureUtil;
+import top.mrxiaom.pluginbase.utils.ColorHelper;
 import top.mrxiaom.sweet.dev.SweetDevelopment;
 import top.mrxiaom.sweet.dev.func.AbstractModule;
 
@@ -182,18 +184,44 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             return t(sender, "只有玩家可以使用该命令");
         }
         Player player = (Player) sender;
-        if (args.length >= 1 && "nbt".equalsIgnoreCase(args[0])) {
+        if (args.length == 1 && "nbt".equalsIgnoreCase(args[0])) {
             ItemStack item = requireItem(player);
             if (item == null) return t(player, "你需要手持一个物品");
-            if (args.length == 1) {
-                t(player, "&e-----------------------------");
-                if (MinecraftVersion.isAtLeastVersion(MinecraftVersion.MC1_20_R4)) {
-                    ReadWriteNBT nbt = itemStackToNBT(item);
-                    return printTag(player, nbt);
-                }
-                return printTag(player, NBT.get(item, nbt -> nbt));
+            t(player, "&e--------------[&f nbt &e]---------------");
+            if (MinecraftVersion.isAtLeastVersion(MinecraftVersion.MC1_20_R4)) {
+                ReadWriteNBT nbt = itemStackToNBT(item);
+                printTag(player, nbt);
+            } else {
+                NBT.get(item, nbt -> {
+                    printTag(player, nbt);
+                });
             }
-            return t(sender, "Hello World!");
+            return t(player, "&e------------------------------------");
+        }
+        if (args.length == 1 && "item".equalsIgnoreCase(args[0])) {
+            ItemStack item = requireItem(player);
+            if (item == null) return t(player, "你需要手持一个物品");
+            t(player, "&e--------------[&f item &e]---------------");
+            String translatable = "";
+            try {
+                String key = item.getTranslationKey();
+                translatable = "  &f原版名字: &e<lang:" + key + ">";
+            } catch (LinkageError ignored) {
+            }
+            AdventureUtil.sendMessage(player, "&f物品: &e" + item.getType() + translatable);
+            ItemMeta meta = item.getItemMeta();
+            if (meta != null) {
+                if (meta.hasDisplayName()) {
+                    player.sendMessage(ColorHelper.parseColor("&f物品名: &r") + meta.getDisplayName());
+                }
+                try {
+                    if (meta.hasCustomModelData()) {
+                        t(player, "&fCustomModelData: &e" + meta.getCustomModelData());
+                    }
+                } catch (LinkageError ignored) {
+                }
+            }
+            return t(player, "&e-------------------------------------");
         }
         return true;
     }
