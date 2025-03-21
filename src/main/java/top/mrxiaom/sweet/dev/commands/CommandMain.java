@@ -20,6 +20,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.Repairable;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import top.mrxiaom.pluginbase.func.AutoRegister;
@@ -198,7 +199,8 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             }
             return t(player, "&e------------------------------------");
         }
-        if (args.length == 1 && "item".equalsIgnoreCase(args[0]) && player.hasPermission("sweet.dev.item")) {
+        if (args.length >= 1 && "item".equalsIgnoreCase(args[0]) && player.hasPermission("sweet.dev.item")) {
+
             ItemStack item = requireItem(player);
             if (item == null) return t(player, "你需要手持一个物品");
             t(player, "&e--------------[&f item &e]---------------");
@@ -208,15 +210,26 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
                 translatable = "  &f原版名字: &e<lang:" + key + ">";
             } catch (LinkageError ignored) {
             }
-            AdventureUtil.sendMessage(player, "&f物品: &e" + item.getType() + translatable);
+            AdventureUtil.sendMessage(player, "  &f物品: &e" + item.getType() + translatable);
+            int stackSize = item.getMaxStackSize();
+            if (stackSize > 1) {
+                t(player, "  &f数量: &e" + item.getAmount() + "/" + stackSize);
+            } else {
+                t(player, "  &f数量: &e" + item.getAmount());
+            }
             ItemMeta meta = item.getItemMeta();
+            if (meta instanceof Repairable) {
+                t(player, "  &f旧版ID: &e" + item.getType().getId() + " &7(data: " + item.getData().getData() + ")");
+            } else {
+                t(player, "  &f旧版ID: &e" + item.getType().getId() + ":" + item.getDurability() + " &7(data: " + item.getData().getData() + ")");
+            }
             if (meta != null) {
                 if (meta.hasDisplayName()) {
-                    player.sendMessage(ColorHelper.parseColor("&f物品名: &r") + meta.getDisplayName());
+                    player.sendMessage(ColorHelper.parseColor("  &f物品名: &r") + meta.getDisplayName());
                 }
                 try {
                     if (meta.hasCustomModelData()) {
-                        t(player, "&fCustomModelData: &e" + meta.getCustomModelData());
+                        t(player, "  &fCustomModelData: &e" + meta.getCustomModelData());
                     }
                 } catch (LinkageError ignored) {
                 }
