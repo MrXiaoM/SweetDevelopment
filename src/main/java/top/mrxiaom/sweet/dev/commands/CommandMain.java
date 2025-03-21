@@ -16,6 +16,7 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
@@ -26,9 +27,12 @@ import org.jetbrains.annotations.Nullable;
 import top.mrxiaom.pluginbase.func.AutoRegister;
 import top.mrxiaom.pluginbase.utils.AdventureUtil;
 import top.mrxiaom.pluginbase.utils.ColorHelper;
+import top.mrxiaom.pluginbase.utils.Util;
 import top.mrxiaom.sweet.dev.SweetDevelopment;
 import top.mrxiaom.sweet.dev.func.AbstractModule;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -200,9 +204,42 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             return t(player, "&e------------------------------------");
         }
         if (args.length >= 1 && "item".equalsIgnoreCase(args[0]) && player.hasPermission("sweet.dev.item")) {
-
+            if (args.length == 3 && "load".equalsIgnoreCase(args[1])) {
+                File file = new File(plugin.getDataFolder(), "items/" + args[2] + ".yml");
+                Util.mkdirs(file.getParentFile());
+                if (!file.exists()) {
+                    file = new File(plugin.getDataFolder(), "items/" + args[2]);
+                    if (!file.exists()) {
+                        String name = args[2].endsWith(".yml") ? args[2] : (args[2] + "(.yml)");
+                        return t(player, "&e文件 items/" + name + " 不存在");
+                    }
+                }
+                YamlConfiguration config = YamlConfiguration.loadConfiguration(file);
+                ItemStack item = config.getItemStack("item");
+                if (item == null) {
+                    return t(player, "&e物品读取失败，详见控制台日志");
+                }
+                player.setItemInHand(item);
+                return t(player, "&a物品读取成功");
+            }
             ItemStack item = requireItem(player);
             if (item == null) return t(player, "你需要手持一个物品");
+            if (args.length == 3 && "save".equalsIgnoreCase(args[1])) {
+                File file = new File(plugin.getDataFolder(), "items/" + args[2] + ".yml");
+                Util.mkdirs(file.getParentFile());
+                if (file.exists()) {
+                    t(player, "&e文件已存在，此操作覆盖了现有文件");
+                }
+                YamlConfiguration config = new YamlConfiguration();
+                config.set("item", item);
+                try {
+                    config.save(file);
+                } catch (IOException e) {
+                    warn(e);
+                    return t(player, "&e物品保存失败，详见控制台日志");
+                }
+                return t(player, "&a物品保存成功 &7(items/" + args[2] + ".yml)");
+            }
             t(player, "&e--------------[&f item &e]---------------");
             String translatable = "";
             try {
@@ -240,17 +277,33 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
     }
 
     private static final List<String> emptyList = Lists.newArrayList();
-    private static final List<String> listArg0 = Lists.newArrayList(
-            "nbt");
-    private static final List<String> listOpArg0 = Lists.newArrayList(
-            "nbt", "reload");
+    private static final List<String> listItemArg1 = Lists.newArrayList(
+            "load", "save"
+    );
     @Nullable
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command, @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
-            return startsWith(sender.isOp() ? listOpArg0 : listArg0, args[0]);
+            List<String> list = new ArrayList<>();
+            if (perm("item", sender)) list.add("item");
+            if (perm("nbt", sender)) list.add("nbt");
+            if (sender.isOp()) list.add("reload");
+            return startsWithL(list, args[0]);
+        }
+        if (args.length == 2) {
+            if (isCommand("item", sender, args[0])) {
+                return startsWith(listItemArg1, args[1]);
+            }
         }
         return emptyList;
+    }
+
+    private boolean isCommand(String s1, CommandSender sender, String arg) {
+        return s1.equalsIgnoreCase(arg) && perm(s1, sender);
+    }
+
+    private boolean perm(String s, CommandSender sender) {
+        return sender.hasPermission("sweet.dev." + s);
     }
 
     public List<String> startsWith(Collection<String> list, String s) {
@@ -262,5 +315,15 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
         if (addition != null) stringList.addAll(0, Lists.newArrayList(addition));
         stringList.removeIf(it -> !it.toLowerCase().startsWith(s1));
         return stringList;
+    }
+
+    public List<String> startsWithL(List<String> list, String s) {
+        return startsWithL(null, list, s);
+    }
+    public List<String> startsWithL(String[] addition, List<String> list, String s) {
+        String s1 = s.toLowerCase();
+        if (addition != null) list.addAll(0, Lists.newArrayList(addition));
+        list.removeIf(it -> !it.toLowerCase().startsWith(s1));
+        return list;
     }
 }
