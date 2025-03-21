@@ -184,7 +184,7 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             return t(sender, "只有玩家可以使用该命令");
         }
         Player player = (Player) sender;
-        if (args.length == 1 && "nbt".equalsIgnoreCase(args[0])) {
+        if (args.length == 1 && "nbt".equalsIgnoreCase(args[0]) && player.hasPermission("sweet.dev.nbt")) {
             ItemStack item = requireItem(player);
             if (item == null) return t(player, "你需要手持一个物品");
             t(player, "&e--------------[&f nbt &e]---------------");
@@ -198,7 +198,7 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             }
             return t(player, "&e------------------------------------");
         }
-        if (args.length == 1 && "item".equalsIgnoreCase(args[0])) {
+        if (args.length == 1 && "item".equalsIgnoreCase(args[0]) && player.hasPermission("sweet.dev.item")) {
             ItemStack item = requireItem(player);
             if (item == null) return t(player, "你需要手持一个物品");
             t(player, "&e--------------[&f item &e]---------------");
