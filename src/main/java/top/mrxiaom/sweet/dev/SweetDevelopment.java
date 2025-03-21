@@ -11,6 +11,7 @@ public class SweetDevelopment extends BukkitPlugin {
 
     public SweetDevelopment() {
         super(options()
+                .adventure(true)
                 .bungee(false)
                 .adventure(true)
                 .database(false)
