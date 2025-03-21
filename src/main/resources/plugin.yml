@@ -6,4 +6,4 @@ authors: [ MrXiaoM ]
 commands:
   sweetdevelopment:
     description: 'The main command of SweetDevelopment'
-    aliases: [ sdev, sd ]
+    aliases: [ sdev, sd, dev ]
