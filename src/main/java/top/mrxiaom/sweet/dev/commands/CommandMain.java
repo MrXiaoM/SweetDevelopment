@@ -17,15 +17,20 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
+import org.bukkit.configuration.MemoryConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.event.HandlerList;
 import org.bukkit.event.Listener;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.Repairable;
+import org.bukkit.plugin.EventExecutor;
+import org.bukkit.plugin.RegisteredListener;
+import org.bukkit.plugin.TimedRegisteredListener;
 import org.bukkit.util.RayTraceResult;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -38,6 +43,8 @@ import top.mrxiaom.sweet.dev.func.AbstractModule;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -342,9 +349,83 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             }
             return t(player, "&e-------------------------------------");
         }
+        if (args.length == 2 && "event".equalsIgnoreCase(args[0])) {
+            Class<?> eventType = parseEvent(args[1]);
+            HandlerList handlerList = null;
+            if (eventType != null) {
+                try {
+                    Method method = eventType.getDeclaredMethod("getHandlerList");
+                    handlerList = (HandlerList) method.invoke(null);
+                } catch (ReflectiveOperationException ignored) {
+                }
+            }
+            if (eventType == null || handlerList == null) {
+                return t(player, "你输入的事件不可用，无法获取相关信息");
+            }
+            RegisteredListener[] listeners = handlerList.getRegisteredListeners();
+            t(player, "&e--------------[&f event &e]---------------");
+            t(player, "  &f 事件: &e" + eventType.getName());
+            t(player, "  &f监听器列表: &7(" + listeners.length + ")");
+            for (RegisteredListener registered : listeners) {
+                String plugin = registered.getPlugin().getName();
+                String listener = registered.getListener().getClass().getName();
+                String priority = registered.getPriority().name().toUpperCase();
+                String ignoreCancelled = registered.isIgnoringCancelled() ? " &7(ignoreCancelled = true)" : "";
+                t(player, "    &8" + priority + " &7[&a" + plugin + "&7] &f" + listener + ignoreCancelled);
+            }
+            return t(player, "&e--------------------------------------");
+        }
+        if (args.length == 1 && "reload".equalsIgnoreCase(args[0])) {
+            plugin.reloadConfig();
+            return t(sender, "&a配置文件已重载");
+        }
         return true;
     }
 
+    @Override
+    public void reloadConfig(MemoryConfiguration config) {
+        Set<String> events = new HashSet<>();
+        for (HandlerList handlerList : HandlerList.getHandlerLists()) {
+            for (RegisteredListener listener : handlerList.getRegisteredListeners()) {
+                try {
+                    if (listener instanceof TimedRegisteredListener) {
+                        Class<?> type = ((TimedRegisteredListener) listener).getEventClass();
+                        if (type != null) {
+                            events.add(type.getName());
+                        }
+                    } else if (listener.getClass().getName().equals(RegisteredListener.class.getName())) {
+                        Field field = RegisteredListener.class.getDeclaredField("executor");
+                        field.setAccessible(true);
+                        EventExecutor executor = (EventExecutor) field.get(listener);
+                        for (Field f : executor.getClass().getFields()) {
+                            if (f.getType().getName().equals(Class.class.getName())) {
+                                f.setAccessible(true);
+                                Class<?> type = (Class<?>) f.get(executor);
+                                events.add(type.getName());
+                                break;
+                            }
+                        }
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        CommandMain.events.clear();
+        for (String event : events) {
+            for (String p : ignorablePackages) {
+                if (event.startsWith(p)) {
+                    String shortType = event.substring(p.length());
+                    if (!CommandMain.events.contains(shortType)) {
+                        CommandMain.events.add(shortType);
+                    }
+                    break;
+                }
+            }
+        }
+        CommandMain.events.addAll(events);
+    }
+
+    private static final List<String> events = new ArrayList<>();
     private static final List<String> emptyList = Lists.newArrayList();
     private static final List<String> listItemArg1 = Lists.newArrayList(
             "load", "save"
@@ -357,12 +438,16 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
             if (perm("item", sender)) list.add("item");
             if (perm("entity", sender)) list.add("entity");
             if (perm("nbt", sender)) list.add("nbt");
+            if (perm("event", sender)) list.add("event");
             if (sender.isOp()) list.add("reload");
             return startsWithL(list, args[0]);
         }
         if (args.length == 2) {
             if (isCommand("item", sender, args[0])) {
                 return startsWith(listItemArg1, args[1]);
+            }
+            if (isCommand("event", sender, args[0])) {
+                return startsWith(events, args[1]);
             }
         }
         return emptyList;
@@ -395,5 +480,33 @@ public class CommandMain extends AbstractModule implements CommandExecutor, TabC
         if (addition != null) list.addAll(0, Lists.newArrayList(addition));
         list.removeIf(it -> !it.toLowerCase().startsWith(s1));
         return list;
+    }
+
+    private static final List<String> ignorablePackages = Lists.newArrayList(
+            "org.bukkit.event.player.",
+            "org.bukkit.event.server.",
+            "org.bukkit.event.block.",
+            "org.bukkit.event.entity.",
+            "org.bukkit.event.enchantment.",
+            "org.bukkit.event.inventory.",
+            "org.bukkit.event.world.",
+            "org.bukkit.event.hanging.",
+            "org.bukkit.event.raid.",
+            "org.bukkit.event.vehicle.",
+            "org.bukkit.event.weather."
+    );
+    @Nullable
+    public static Class<?> parseEvent(String type) {
+        try {
+            return Class.forName(type);
+        } catch (ClassNotFoundException e) {
+            for (String p : ignorablePackages) {
+                try {
+                    return Class.forName(p + type);
+                } catch (ClassNotFoundException ignored) {
+                }
+            }
+        }
+        return null;
     }
 }
